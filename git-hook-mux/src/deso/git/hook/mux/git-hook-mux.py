@@ -19,6 +19,9 @@
 
 """This script can be used to enable multiple hooks for git(1)."""
 
+from argparse import (
+  ArgumentParser,
+)
 from deso.execute import (
   execute,
   findCommand,
@@ -64,10 +67,32 @@ def isVerbose():
     return False
 
 
+def setupArgumentParser():
+  """Create and initialize an argument parser, ready for use."""
+  parser = ArgumentParser(prog="git-hook-mux")
+  parser.add_argument(
+    "-t", "--hook-type", action="store", default=None, dest="hook_type",
+    help="The type of hook to invoke (e.g., 'pre-commit').",
+  )
+  return parser
+
+
 def main(argv):
   """Check the type of hook we got invoked for and invoke the configured user-defined ones."""
+  parser = setupArgumentParser()
+  namespace = parser.parse_args(argv[1:])
   verbose = isVerbose()
-  hook_type = basename(argv[0])
+
+  # We support two use cases: the hook multiplexer can be copied (or
+  # symlinked) to a git hook in which case the hook type to use is
+  # inferred from the script/symlink name. The script can also be
+  # invoked with the hook type as argument which would override the file
+  # name based hook type determination.
+  if namespace.hook_type is not None:
+    hook_type = namespace.hook_type
+  else:
+    hook_type = basename(argv[0])
+
   hooks = retrieveHookList(hook_type)
 
   if verbose:

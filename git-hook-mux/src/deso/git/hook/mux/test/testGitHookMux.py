@@ -32,6 +32,7 @@ from deso.git.repo import (
 )
 from os import (
   chmod,
+  environ,
   symlink,
   unlink,
 )
@@ -48,6 +49,9 @@ from sys import (
 from tempfile import (
   NamedTemporaryFile,
 )
+from textwrap import (
+  dedent,
+)
 from unittest import (
   main,
   TestCase,
@@ -59,9 +63,11 @@ GIT = findCommand("git")
 
 class GitRepository(Repository):
   """A git repository with subrepo support."""
-  def __init__(self):
+  def __init__(self, symlink=True):
     """Initialize the git repository."""
     super().__init__(GIT)
+
+    self._symlink = symlink
 
 
   def _init(self):
@@ -77,14 +83,35 @@ class GitRepository(Repository):
     # the pre-commit hook.
     dst = self.path(".git", "hooks", "git-hook-mux.py")
     copyfile(src, dst)
-    # The hook script is required to be executable.
-    chmod(dst, 0o755)
 
-    # We are pretty sure things work when copying the file. We want to
-    # verify that symlinking works as well.
     src = dst
     dst = self.path(".git", "hooks", "pre-commit")
-    symlink(src, dst)
+
+    if self._symlink:
+      # We are pretty sure things work when copying the file. We want to
+      # verify that symlinking works as well.
+      symlink(src, dst)
+    else:
+      # We also want to use the version with a command line parameter.
+      # Note that we have to specify the PYTHONPATH here explicitly for
+      # the case that virtual environments are in use.
+      with open(dst, "w") as f:
+        pyc = environ.get("PYTHONDONTWRITEBYTECODE", "")
+        path = environ.get("PATH", "")
+        pypath = environ.get("PYTHONPATH", "")
+        content = dedent("""\
+          #!/bin/sh
+          PATH="{path}" \\
+          PYTHONPATH="{pypath}" \\
+          PYTHONDONTWRITEBYTECODE="{pyc}" \\
+          {py} {script} --hook-type pre-commit
+        """)
+        content = content.format(path=path, pypath=pypath, pyc=pyc,
+                                 py=executable, script=src)
+        f.write(content)
+
+    # The hook script is required to be executable.
+    chmod(dst, 0o755)
 
 
   def configAdd(self, *args):
@@ -96,9 +123,9 @@ class TestGitHookMux(TestCase):
   """Tests for the git-subrepo script."""
   def testPreCommitHookInvocation(self):
     """Verify that pre-commit hooks are invoked correctly."""
-    def doTest(hooks=None):
+    def doTest(hooks=None, symlink=True):
       """Configure pre-commit hooks in a repository and create a commit."""
-      with GitRepository() as repo:
+      with GitRepository(symlink=symlink) as repo:
         write(repo, "test.dat", data="test")
         repo.add("test.dat")
 
@@ -112,7 +139,7 @@ class TestGitHookMux(TestCase):
     doTest()
 
     # Also verify that things just work if the hook key is empty.
-    doTest([""])
+    doTest([""], symlink=False)
 
     # Two in-line hooks. Both failing. Used to verify that both are
     # actually executed.
@@ -123,7 +150,7 @@ class TestGitHookMux(TestCase):
       doTest(["", hook1, hook2])
 
     with self.assertRaisesRegex(ProcessError, r"Status 42"):
-      doTest([hook2, "", hook1, " "])
+      doTest([hook2, "", hook1, " "], symlink=False)
 
     with defer() as d:
       script = NamedTemporaryFile(mode="w", delete=False)
