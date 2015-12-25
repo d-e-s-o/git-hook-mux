@@ -54,10 +54,25 @@ def retrieveHookList(hook_type):
     return []
 
 
+def isVerbose():
+  """Check if the script should be verbose."""
+  name = "%s.%s" % (GIT_HOOK_SECTION, "verbose")
+  try:
+    out, _ = execute(GIT, "config", "--bool", "--get", name, stdout=b"", stderr=None)
+    return out[:-1] == b"true"
+  except ProcessError:
+    return False
+
+
 def main(argv):
   """Check the type of hook we got invoked for and invoke the configured user-defined ones."""
+  verbose = isVerbose()
   hook_type = basename(argv[0])
   hooks = retrieveHookList(hook_type)
+
+  if verbose:
+    print("Hook type: %s" % hook_type)
+    print("Hooks registered:\n%s" % "\n".join(hooks))
 
   try:
     for hook in hooks:
