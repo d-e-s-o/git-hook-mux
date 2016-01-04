@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #/***************************************************************************
-# *   Copyright (C) 2015 Daniel Mueller (deso@posteo.net)                   *
+# *   Copyright (C) 2015-2016 Daniel Mueller (deso@posteo.net)              *
 # *                                                                         *
 # *   This program is free software: you can redistribute it and/or modify  *
 # *   it under the terms of the GNU General Public License as published by  *
@@ -44,9 +44,9 @@ GIT = findCommand("git")
 GIT_HOOK_SECTION = "hook-mux"
 
 
-def retrieveHookList(hook_type):
+def retrieveHookList(section, hook_type):
   """Retrieve the list of configured hooks for the given hook type."""
-  name = "%s.%s" % (GIT_HOOK_SECTION, hook_type)
+  name = "%s.%s" % (section, hook_type)
   try:
     out, _ = execute(GIT, "config", "--get-all", name, stdout=b"", stderr=None)
     value = out.decode("utf-8")
@@ -57,9 +57,9 @@ def retrieveHookList(hook_type):
     return []
 
 
-def isVerbose():
+def isVerbose(section):
   """Check if the script should be verbose."""
-  name = "%s.%s" % (GIT_HOOK_SECTION, "verbose")
+  name = "%s.%s" % (section, "verbose")
   try:
     out, _ = execute(GIT, "config", "--bool", "--get", name, stdout=b"", stderr=None)
     return out[:-1] == b"true"
@@ -71,6 +71,12 @@ def setupArgumentParser():
   """Create and initialize an argument parser, ready for use."""
   parser = ArgumentParser(prog="git-hook-mux")
   parser.add_argument(
+    "-s", "--section", action="store", default=GIT_HOOK_SECTION,
+    dest="section",
+    help="The name of the git-config(1) section to use (defaults to "
+         "'%s')." % GIT_HOOK_SECTION,
+  )
+  parser.add_argument(
     "-t", "--hook-type", action="store", default=None, dest="hook_type",
     help="The type of hook to invoke (e.g., 'pre-commit').",
   )
@@ -81,7 +87,8 @@ def main(argv):
   """Check the type of hook we got invoked for and invoke the configured user-defined ones."""
   parser = setupArgumentParser()
   namespace = parser.parse_args(argv[1:])
-  verbose = isVerbose()
+  section = namespace.section
+  verbose = isVerbose(section)
 
   # We support two use cases: the hook multiplexer can be copied (or
   # symlinked) to a git hook in which case the hook type to use is
@@ -93,9 +100,10 @@ def main(argv):
   else:
     hook_type = basename(argv[0])
 
-  hooks = retrieveHookList(hook_type)
+  hooks = retrieveHookList(section, hook_type)
 
   if verbose:
+    print("Section: %s" % section)
     print("Hook type: %s" % hook_type)
     print("Hooks registered:\n%s" % "\n".join(hooks))
 

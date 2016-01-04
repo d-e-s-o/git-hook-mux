@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #/***************************************************************************
-# *   Copyright (C) 2015 Daniel Mueller (deso@posteo.net)                   *
+# *   Copyright (C) 2015-2016 Daniel Mueller (deso@posteo.net)              *
 # *                                                                         *
 # *   This program is free software: you can redistribute it and/or modify  *
 # *   it under the terms of the GNU General Public License as published by  *
@@ -63,11 +63,16 @@ GIT = findCommand("git")
 
 class GitRepository(Repository):
   """A git repository with subrepo support."""
-  def __init__(self, symlink=True):
+  def __init__(self, symlink=True, section=None):
     """Initialize the git repository."""
     super().__init__(GIT)
 
+    # When using the symlink version we cannot pass any parameters to
+    # the script.
+    assert not (symlink and section is not None)
+
     self._symlink = symlink
+    self._section = section
 
 
   def _init(self):
@@ -92,6 +97,8 @@ class GitRepository(Repository):
       # verify that symlinking works as well.
       symlink(src, dst)
     else:
+      args = "--section=%s" % self._section if self._section is not None else ""
+
       # We also want to use the version with a command line parameter.
       # Note that we have to specify the PYTHONPATH here explicitly for
       # the case that virtual environments are in use.
@@ -104,10 +111,11 @@ class GitRepository(Repository):
           PATH="{path}" \\
           PYTHONPATH="{pypath}" \\
           PYTHONDONTWRITEBYTECODE="{pyc}" \\
-          {py} {script} --hook-type pre-commit
+          {py} {script} {args} --hook-type pre-commit
         """)
         content = content.format(path=path, pypath=pypath, pyc=pyc,
-                                 py=executable, script=src)
+                                 py=executable, script=src, args=args)
+
         f.write(content)
 
     # The hook script is required to be executable.
@@ -165,6 +173,25 @@ class TestGitHookMux(TestCase):
       chmod(script.name, 0o755)
       with self.assertRaisesRegex(ProcessError, r"Status 12"):
         doTest([script.name])
+
+
+  def testSectionIsConfigurable(self):
+    """Verify that the section git-hook-mux uses is configurable."""
+    def doTest(section):
+      """Check whether the hook-mux script works when using the given section."""
+      with GitRepository(symlink=False, section=section) as repo:
+        hook = "%s -c 'exit(57)'" % executable
+
+        write(repo, "file.txt", data="data")
+        repo.add("file.txt")
+        repo.configAdd("%s.pre-commit" % section, hook)
+
+        with self.assertRaisesRegex(ProcessError, r"Status 57"):
+          repo.commit()
+
+    doTest("test")
+    doTest("hook-mux")
+    doTest("hook-mux-files-cxx")
 
 
 if __name__ == "__main__":
