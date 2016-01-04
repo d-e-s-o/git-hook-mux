@@ -31,10 +31,12 @@ from os.path import (
   basename,
 )
 from shlex import (
+  quote,
   split as shsplit,
 )
 from sys import (
   argv as sysargv,
+  executable,
   stdout,
   stderr,
 )
@@ -89,6 +91,7 @@ def main(argv):
   namespace = parser.parse_args(argv[1:])
   section = namespace.section
   verbose = isVerbose(section)
+  this_prog = [executable, argv[0]]
 
   # We support two use cases: the hook multiplexer can be copied (or
   # symlinked) to a git hook in which case the hook type to use is
@@ -97,6 +100,13 @@ def main(argv):
   # name based hook type determination.
   if namespace.hook_type is not None:
     hook_type = namespace.hook_type
+    # The script got invoked with the -t/--hook-type parameter. When
+    # replacing the <self> keyword we need to pass on this parameter.
+    # We treat this argument specially because the information can as
+    # well be conveyed implicitly in case a symlink is used for
+    # invocation. We do not want the client's configuration to differ
+    # between either two cases.
+    this_prog += ["--hook-type=%s" % hook_type]
   else:
     hook_type = basename(argv[0])
 
@@ -109,6 +119,18 @@ def main(argv):
 
   try:
     for hook in hooks:
+      # Replace the special keyword <self> with our own script to
+      # simplify recursive invocation. Two things are important to note
+      # here: first, argv[0] will *always* point to "this" very script,
+      # independent if we used a symlink, a "normal" invocation from a
+      # shell script, or performed an 'exec'. Second, there is no
+      # guarantee that "this" script is executable. It will be if we
+      # used a symlink but it might not if it was called from a shell
+      # script or similar means.
+      # So what we do here is to always invoke the Python interpreter
+      # and pass argv[0] to it (which is a valid approach because "this"
+      # script is a Python script).
+      hook = hook.replace("<self>", " ".join(map(quote, this_prog)))
       execute(*shsplit(hook), stdout=stdout.fileno(), stderr=stderr.fileno())
   except ProcessError as e:
     # Note that since we redirected stderr directly we will not have the

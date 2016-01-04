@@ -194,5 +194,30 @@ class TestGitHookMux(TestCase):
     doTest("hook-mux-files-cxx")
 
 
+  def testSelfInvocation(self):
+    """Verify that the '<self>' keyword works properly."""
+    def doTest(symlink):
+      """Test the '<self>' keyword with forwarding hook muxes."""
+      with GitRepository(symlink=symlink) as repo:
+        hook = "%s -c 'exit(57)'" % executable
+
+        write(repo, "file.txt", data="data")
+        repo.add("file.txt")
+        # Configure the "main" hook-mux.
+        repo.configAdd("hook-mux.pre-commit", "<self> --section=test1-mux")
+        # Also configure more hooks that forward invocations.
+        repo.configAdd("test1-mux.pre-commit", "<self> --section=test2-mux")
+        repo.configAdd("test2-mux.pre-commit", "<self> --section=test3-mux")
+        repo.configAdd("test3-mux.pre-commit", "<self> --section=test4-mux")
+        # The last one in the chain finally performs the hook invocation.
+        repo.configAdd("test4-mux.pre-commit", hook)
+
+        with self.assertRaisesRegex(ProcessError, r"Status 57"):
+          repo.commit()
+
+    doTest(True)
+    doTest(False)
+
+
 if __name__ == "__main__":
   main()
