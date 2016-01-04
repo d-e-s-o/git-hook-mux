@@ -219,5 +219,64 @@ class TestGitHookMux(TestCase):
     doTest(False)
 
 
+  def testFileCommand(self):
+    """Verify that the --file-cmd parameter works as expected."""
+    def doTest(depth, symlink):
+      """Test the --file-cmd option and filtering of commands."""
+      assert depth > 0 and depth < 5
+
+      with GitRepository(symlink=symlink) as repo:
+        # The initial file command lists all the files to be committed.
+        file_cmd = "%s diff --staged --name-only --diff-filter=AM --no-color --no-prefix" % GIT
+        # The filter removes the first file passed to it from the list.
+        filter_cmd = "%s -c 'from sys import argv; print(\\\" \\\".join(argv[2:]))'" % executable
+        # The hook fails with an exit code representing the number of
+        # files passed to it. This way we can infer whether the
+        # filtering worked as expected.
+        hook = "%s -c 'from sys import argv; exit(len(argv) - 1)'" % executable
+
+        for i in range(10):
+          write(repo, "file%d.txt" % i, data="data%d" % i)
+          repo.add("file%d.txt" % i)
+
+        cmd = "<self> --section=test1-mux --file-cmd=\"%s\"" % file_cmd
+        repo.configAdd("hook-mux.pre-commit", cmd)
+
+        for i in range(1, depth):
+          cmd = "<self> --section=test%d-mux --file-cmd=\"%s\"" % (i + 1, filter_cmd)
+          repo.configAdd("test%d-mux.pre-commit" % i, cmd)
+
+        repo.configAdd("test%d-mux.pre-commit" % depth, hook)
+
+        with self.assertRaisesRegex(ProcessError, r"Status %d" % (10 - depth + 1)):
+          repo.commit()
+
+    for i in range(1, 3):
+      doTest(i, True)
+      doTest(i, False)
+
+
+  def testFileCommandYieldsNoFiles(self):
+    """Check that we stop recursion if a file command yields no files."""
+    def doTest(symlink):
+      """Run the test."""
+      with GitRepository(symlink=symlink) as repo:
+        file_cmd = "%s diff --staged --name-only --diff-filter=AM --no-color --no-prefix" % GIT
+        hook = "%s -c 'exit(42)'" % executable
+
+        cmd = "<self> --section=test1-mux --file-cmd=\"%s\"" % file_cmd
+        repo.configAdd("hook-mux.verbose", "True")
+        repo.configAdd("hook-mux.pre-commit", cmd)
+        repo.configAdd("test1-mux.pre-commit", hook)
+
+        # We create an empty commit. No files will be reported as being
+        # changed and so the 'test1-mux' hook (which would fail) will
+        # never be invoked.
+        repo.commit("--allow-empty")
+
+    doTest(True)
+    doTest(False)
+
+
 if __name__ == "__main__":
   main()

@@ -73,6 +73,15 @@ def setupArgumentParser():
   """Create and initialize an argument parser, ready for use."""
   parser = ArgumentParser(prog="git-hook-mux")
   parser.add_argument(
+    "files", action="store", default=[], nargs="*",
+    help="A list of files to pass to the invoked hooks in the form of "
+         "positional arguments.",
+  )
+  parser.add_argument(
+    "-c", "--file-cmd", action="store", default=None, dest="file_cmd",
+    help="A command to execute to retrieve or filter a list of files.",
+  )
+  parser.add_argument(
     "-s", "--section", action="store", default=GIT_HOOK_SECTION,
     dest="section",
     help="The name of the git-config(1) section to use (defaults to "
@@ -89,7 +98,9 @@ def main(argv):
   """Check the type of hook we got invoked for and invoke the configured user-defined ones."""
   parser = setupArgumentParser()
   namespace = parser.parse_args(argv[1:])
+  file_cmd = namespace.file_cmd
   section = namespace.section
+  files = namespace.files
   verbose = isVerbose(section)
   this_prog = [executable, argv[0]]
 
@@ -118,6 +129,22 @@ def main(argv):
     print("Hooks registered:\n%s" % "\n".join(hooks))
 
   try:
+    if file_cmd is not None:
+      cmd = shsplit(file_cmd) + files
+      out, _ = execute(*cmd, stdout=b"", stderr=stderr.fileno())
+      # Note that because we use a simple str.split here, we can work
+      # with newline separated as well as space separated outputs alike,
+      # which helps a good deal since we do not require helper such as
+      # xargs. However, we will fail if a file name/path contains
+      # spaces.
+      files = out.decode("utf-8").split()
+      # We allow file commands to terminate the recursion prematurely if
+      # they were not able to find any files to work on.
+      if files == []:
+        if verbose:
+          print("File command found no files to work on. Stopping.")
+        return 0
+
     for hook in hooks:
       # Replace the special keyword <self> with our own script to
       # simplify recursive invocation. Two things are important to note
@@ -131,7 +158,8 @@ def main(argv):
       # and pass argv[0] to it (which is a valid approach because "this"
       # script is a Python script).
       hook = hook.replace("<self>", " ".join(map(quote, this_prog)))
-      execute(*shsplit(hook), stdout=stdout.fileno(), stderr=stderr.fileno())
+      cmd = shsplit(hook) + files
+      execute(*cmd, stdout=stdout.fileno(), stderr=stderr.fileno())
   except ProcessError as e:
     # Note that since we redirected stderr directly we will not have the
     # output here. However, we will still get the command run and the
