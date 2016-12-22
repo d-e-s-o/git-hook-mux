@@ -24,6 +24,7 @@ from deso.execute import (
 )
 from os import (
   chdir,
+  environ,
   getcwd,
 )
 from os.path import (
@@ -51,6 +52,38 @@ def read(repo, *components):
   """Read data from a file in the repository."""
   with open(repo.path(*components), "r") as f:
     return f.read()
+
+
+class PathMixin:
+  """A mixin inheriting the PATH environment variable to all executed git commands."""
+  @staticmethod
+  def inheritEnv(env):
+    """Inherit the PATH environment variable into the given environment."""
+    env["PATH"] = environ["PATH"]
+
+
+  def git(self, *args, **kwargs):
+    """Run a git command, taking care to inherit the PATH environment variable."""
+    env = kwargs.setdefault("env", {})
+    PathMixin.inheritEnv(env)
+
+    return super().git(*args, **kwargs)
+
+
+class PythonMixin:
+  """A mixin inheriting PYTHON* environment variables to all executed git commands."""
+  @staticmethod
+  def inheritEnv(env):
+    """Inherit all PYTHON* environment variables into the given environment."""
+    env.update(filter(lambda x: x[0].startswith("PYTHON"), environ.items()))
+
+
+  def git(self, *args, **kwargs):
+    """Run a git command, taking care to inherit all PYTHON* environment variables."""
+    env = kwargs.setdefault("env", {})
+    PythonMixin.inheritEnv(env)
+
+    return super().git(*args, **kwargs)
 
 
 class Repository:

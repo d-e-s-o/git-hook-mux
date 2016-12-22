@@ -50,7 +50,7 @@ def retrieveHookList(section, hook_type):
   """Retrieve the list of configured hooks for the given hook type."""
   name = "%s.%s" % (section, hook_type)
   try:
-    out, _ = execute(GIT, "config", "--get-all", name, stdout=b"", stderr=None)
+    out = execute(GIT, "config", "--get-all", name, stdout=b"", stderr=None)
     value = out.decode("utf-8")
     # Split each line reported by git-config into a separate string.
     # Remove all whitespace only strings.
@@ -63,7 +63,7 @@ def isVerbose(section):
   """Check if the script should be verbose."""
   name = "%s.%s" % (section, "verbose")
   try:
-    out, _ = execute(GIT, "config", "--bool", "--get", name, stdout=b"", stderr=None)
+    out = execute(GIT, "config", "--bool", "--get", name, stdout=b"", stderr=None)
     return out[:-1] == b"true"
   except ProcessError:
     return False

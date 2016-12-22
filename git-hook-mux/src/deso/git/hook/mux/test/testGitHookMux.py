@@ -27,12 +27,12 @@ from deso.execute import (
   ProcessError,
 )
 from deso.git.repo import (
+  PythonMixin,
   Repository,
   write,
 )
 from os import (
   chmod,
-  environ,
   symlink,
   unlink,
 )
@@ -61,7 +61,7 @@ from unittest import (
 GIT = findCommand("git")
 
 
-class GitRepository(Repository):
+class GitRepository(PythonMixin, Repository):
   """A git repository with subrepo support."""
   def __init__(self, symlink=True, section=None):
     """Initialize the git repository."""
@@ -100,21 +100,12 @@ class GitRepository(Repository):
       args = "--section=%s" % self._section if self._section is not None else ""
 
       # We also want to use the version with a command line parameter.
-      # Note that we have to specify the PYTHONPATH here explicitly for
-      # the case that virtual environments are in use.
       with open(dst, "w") as f:
-        pyc = environ.get("PYTHONDONTWRITEBYTECODE", "")
-        path = environ.get("PATH", "")
-        pypath = environ.get("PYTHONPATH", "")
         content = dedent("""\
           #!/bin/sh
-          PATH="{path}" \\
-          PYTHONPATH="{pypath}" \\
-          PYTHONDONTWRITEBYTECODE="{pyc}" \\
           {py} {script} {args} --hook-type pre-commit
         """)
-        content = content.format(path=path, pypath=pypath, pyc=pyc,
-                                 py=executable, script=src, args=args)
+        content = content.format(py=executable, script=src, args=args)
 
         f.write(content)
 

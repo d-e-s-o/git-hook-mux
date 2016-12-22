@@ -1,7 +1,7 @@
 # testExecute.py
 
 #/***************************************************************************
-# *   Copyright (C) 2014-2015 Daniel Mueller (deso@posteo.net)              *
+# *   Copyright (C) 2014-2016 Daniel Mueller (deso@posteo.net)              *
 # *                                                                         *
 # *   This program is free software: you can redistribute it and/or modify  *
 # *   it under the terms of the GNU General Public License as published by  *
@@ -107,15 +107,24 @@ class TestExecute(TestCase):
 
   def testProcessErrorFormattingStderr(self):
     """Verify that the ProcessError class properly handles new lines."""
-    tmp_file = mktemp()
     # Note that when using ChildProcessError the newline would not
     # appear as a true newline but rather as the actual text '\n' (i.e.,
     # \\n in a string). With ProcessError we are supposed to get a
     # properly interpreted newline.
-    regex = r".*No such file or directory\n"
+    regex = r"missing operand\nTry"
 
     with self.assertRaisesRegex(ProcessError, regex):
-      execute(_CAT, tmp_file, stderr=b"")
+      execute(_TR, stderr=b"")
+
+
+  def testProcessErrorStripping(self):
+    """Verify that ProcessError properly strips its stderr input."""
+    string = "this is a\nmulti-line\ntext"
+
+    with self.assertRaises(ProcessError) as e:
+      raise ProcessError(1, _FALSE, "\t %s\n\n" % string)
+
+    self.assertEqual(e.exception.stderr, string)
 
 
   def testExitCodeTruncation(self):
@@ -214,13 +223,13 @@ class TestExecute(TestCase):
 
   def testExecuteAndNoOutput(self):
     """Test command execution and output retrieval for empty output."""
-    output, _ = execute(_TRUE, stdout=b"")
+    output = execute(_TRUE, stdout=b"")
     self.assertEqual(output, b"")
 
 
   def testExecuteAndOutput(self):
     """Test command execution and output retrieval."""
-    output, _ = execute(_ECHO, "success", stdout=b"")
+    output = execute(_ECHO, "success", stdout=b"")
     self.assertEqual(output, b"success\n")
 
 
@@ -230,7 +239,7 @@ class TestExecute(TestCase):
       file_.write(b"success")
       file_.seek(0)
 
-      out, _ = execute(_CAT, stdin=file_.fileno(), stdout=b"")
+      out = execute(_CAT, stdin=file_.fileno(), stdout=b"")
       self.assertEqual(out, b"success")
 
 
@@ -258,13 +267,13 @@ class TestExecute(TestCase):
   def testExecuteAndOutputMultipleLines(self):
     """Test command execution with multiple lines of output."""
     string = "first-line\nsuccess"
-    output, _ = execute(_ECHO, string, stdout=b"")
+    output = execute(_ECHO, string, stdout=b"")
     self.assertEqual(output, bytes(string + "\n", "utf-8"))
 
 
   def testExecuteAndInputOutput(self):
     """Test that we can redirect stdin and stdout at the same time."""
-    output, _ = execute(_CAT, stdin=b"success", stdout=b"")
+    output = execute(_CAT, stdin=b"success", stdout=b"")
     self.assertEqual(output, b"success")
 
 
@@ -313,11 +322,11 @@ class TestExecute(TestCase):
         commands = [
           [cmd],
         ]
-        out, _ = spring(commands, env=env, stdout=b"")
+        out = spring(commands, env=env, stdout=b"")
       else:
         # The execute function uses a pipeline internally so we have no
         # separate test for pipelines.
-        out, _ = execute(*cmd, env=env, stdout=b"")
+        out = execute(*cmd, env=env, stdout=b"")
 
       return out[:-1].decode("utf-8")
 
@@ -476,7 +485,7 @@ class TestExecute(TestCase):
       [_TR, "a", "c"],
       [_TR, "r", "s"],
     ]
-    output, _ = pipeline(commands, stdout=b"")
+    output = pipeline(commands, stdout=b"")
 
     self.assertEqual(output, b"success\n")
 
@@ -498,7 +507,7 @@ class TestExecute(TestCase):
       #       command solves the issue.
       #commands += [[_DD, 'bs=%s' % megabyte, 'count=%s' % megabytes]]
 
-      out, _ = pipeline(commands, stdin=data, stdout=b"")
+      out = pipeline(commands, stdin=data, stdout=b"")
       self.assertEqual(len(out), len(data))
 
 
@@ -573,8 +582,8 @@ class TestExecute(TestCase):
     """Execute a spring without capturing its output."""
     commands = [[_ECHO, "test1"], [_ECHO, "test2"]]
 
-    out, _ = spring([commands])
-    self.assertEqual(out, b"")
+    out = spring([commands])
+    self.assertIsNone(out)
 
 
   def testSpringReadOut(self):
@@ -593,7 +602,7 @@ class TestExecute(TestCase):
     for text in ["abc", "def", "ghi", "jkl", "mno", "pqr", "stu", "vwx", "yz"]:
       commands += [[_ECHO, text]]
 
-      out, _ = spring([commands], stdout=b"")
+      out = spring([commands], stdout=b"")
       expected = "\n".join([t for _, t in commands]) + "\n"
       self.assertEqual(out, bytes(expected, "utf-8"))
 
@@ -609,7 +618,7 @@ class TestExecute(TestCase):
 
     for _ in range(5):
       commands += [identity]
-      output, _ = spring(commands, stdout=b"")
+      output = spring(commands, stdout=b"")
 
       self.assertEqual(output, b"success\nyippie\nwohoo\n")
 
@@ -706,8 +715,7 @@ class TestExecute(TestCase):
           print("PARENT")
       """).format(cmd="close(stdout.fileno())" if close else ""), "utf-8")
 
-      stdout, _ = execute(executable, stdin=script, stdout=b"")
-      return stdout
+      return execute(executable, stdin=script, stdout=b"")
 
     stdout = runAndRead()
     self.assertTrue(stdout == b"PARENT\nCHILD\n" or
