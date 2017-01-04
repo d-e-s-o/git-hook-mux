@@ -1,7 +1,7 @@
 # testExecute.py
 
 #/***************************************************************************
-# *   Copyright (C) 2014-2016 Daniel Mueller (deso@posteo.net)              *
+# *   Copyright (C) 2014-2017 Daniel Mueller (deso@posteo.net)              *
 # *                                                                         *
 # *   This program is free software: you can redistribute it and/or modify  *
 # *   it under the terms of the GNU General Public License as published by  *
@@ -285,6 +285,25 @@ class TestExecute(TestCase):
     self.assertEqual(out, b"success")
     self.assertTrue(line1.endswith("records in"))
     self.assertTrue(line2.endswith("records out"))
+
+
+  def testRedirectedStreamIsNotReturned(self):
+    """Verify that if a stream is redirected into a file it nothing is returned."""
+    def doTest(execute_fn):
+      """Check that no undesired data is returned."""
+      with TemporaryFile() as file_:
+        result = execute_fn(_ECHO, "test1", stdout=file_.fileno())
+        self.assertIsNone(result)
+
+        result = execute_fn(_ECHO, "test2", stderr=file_.fileno())
+        self.assertIsNone(result)
+
+        result = execute_fn(_ECHO, "test3", stdout=file_.fileno(), stderr=file_.fileno())
+        self.assertIsNone(result)
+
+    doTest(execute)
+    doTest(lambda *a, **k: pipeline([list(a)], **k))
+    doTest(lambda *a, **k: spring([[list(a)]], **k))
 
 
   def testExecuteThrowsOnCommandFailure(self):
@@ -723,6 +742,25 @@ class TestExecute(TestCase):
 
     stdout = runAndRead(close=True)
     self.assertTrue(stdout == b"PARENT\n", stdout)
+
+
+  def testProcessErrorStderrMemser(self):
+    """Verify that the ProcessError's stderr is set properly."""
+    def doTest(execute_fn):
+      """Check that the stderr member is set properly."""
+      with self.assertRaises(ProcessError) as e:
+        execute_fn(executable, "-c", "exit(1)", stderr=b"")
+
+      self.assertEqual(e.exception.stderr, "")
+
+      with self.assertRaises(ProcessError) as e:
+        execute_fn(executable, "-c", "exit(1)", stderr=None)
+
+      self.assertIsNone(e.exception.stderr)
+
+    doTest(execute)
+    doTest(lambda *a, **k: pipeline([list(a)], **k))
+    doTest(lambda *a, **k: spring([[list(a)]], **k))
 
 
 if __name__ == "__main__":

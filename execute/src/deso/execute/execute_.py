@@ -1,7 +1,7 @@
 # execute_.py
 
 #/***************************************************************************
-# *   Copyright (C) 2014-2016 Daniel Mueller (deso@posteo.net)              *
+# *   Copyright (C) 2014-2017 Daniel Mueller (deso@posteo.net)              *
 # *                                                                         *
 # *   This program is free software: you can redistribute it and/or modify  *
 # *   it under the terms of the GNU General Public License as published by  *
@@ -357,7 +357,7 @@ def _wait(pids, commands, data_err, status=0, failed=None):
       status = this_status
 
   if status != 0:
-    error = data_err.decode("utf-8") if data_err else None
+    error = data_err.decode("utf-8") if data_err is not None else None
     raise ProcessError(status, failed, error)
 
 
@@ -640,13 +640,18 @@ def pipeline(commands, env=None, stdin=None, stdout=None, stderr=b""):
   # We have read or written all data that was available, the last thing
   # to do is to wait for all the processes to finish and to clean them
   # up.
-  _wait(pids, commands, data_err)
+  _wait(pids, commands, data_err if stderr is not None else None)
 
-  if stdout is not None and stderr is not None:
+  # We mirror the logic from __init__ in that we special case values of
+  # None and of type int and treating everything else as data.
+  stdout_valid = stdout is not None and not isinstance(stdout, int)
+  stderr_valid = stderr is not None and not isinstance(stderr, int)
+
+  if stdout_valid and stderr_valid:
     return data_out, data_err
-  elif stdout is not None:
+  elif stdout_valid:
     return data_out
-  elif stderr is not None:
+  elif stderr_valid:
     return data_err
 
 
@@ -794,11 +799,15 @@ def spring(commands, env=None, stdout=None, stderr=b""):
 
     data_out, data_err = fds.data()
 
-  _wait(pids, commands, data_err, status=status, failed=failed)
+  error = data_err if stderr is not None else None
+  _wait(pids, commands, error, status=status, failed=failed)
 
-  if stdout is not None and stderr is not None:
+  stdout_valid = stdout is not None and not isinstance(stdout, int)
+  stderr_valid = stderr is not None and not isinstance(stderr, int)
+
+  if stdout_valid and stderr_valid:
     return data_out, data_err
-  elif stdout is not None:
+  elif stdout_valid:
     return data_out
-  elif stderr is not None:
+  elif stderr_valid:
     return data_err

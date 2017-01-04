@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #/***************************************************************************
-# *   Copyright (C) 2015-2016 Daniel Mueller (deso@posteo.net)              *
+# *   Copyright (C) 2015-2017 Daniel Mueller (deso@posteo.net)              *
 # *                                                                         *
 # *   This program is free software: you can redistribute it and/or modify  *
 # *   it under the terms of the GNU General Public License as published by  *
@@ -131,7 +131,7 @@ def main(argv):
   try:
     if file_cmd is not None:
       cmd = shsplit(file_cmd) + files
-      out, _ = execute(*cmd, stdout=b"", stderr=stderr.fileno())
+      out = execute(*cmd, stdout=b"", stderr=stderr.fileno())
       # Note that because we use a simple str.split here, we can work
       # with newline separated as well as space separated outputs alike,
       # which helps a good deal since we do not require helper such as
