@@ -1,7 +1,7 @@
 # Makefile
 
 #/***************************************************************************
-# *   Copyright (C) 2015 Daniel Mueller (deso@posteo.net)                   *
+# *   Copyright (C) 2015,2018 Daniel Mueller (deso@posteo.net)              *
 # *                                                                         *
 # *   This program is free software: you can redistribute it and/or modify  *
 # *   it under the terms of the GNU General Public License as published by  *
@@ -17,10 +17,20 @@
 # *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
 # ***************************************************************************/
 
+ROOT := $(shell pwd)/..
+PYTHONPATH := "$(ROOT)/cleanup/src/:$(ROOT)/execute/src/:$(ROOT)/git-repo/src:$(ROOT)/git-hook-mux/src:${PYTHONPATH}"
+
 
 .PHONY: test
-test: ROOT := $(shell pwd)/..
 test:
-	@PYTHONPATH="$(ROOT)/cleanup/src/:$(ROOT)/execute/src/:$(ROOT)/git-repo/src:$(ROOT)/git-hook-mux/src:${PYTHONPATH}"\
+	@PYTHONPATH="$(PYTHONPATH)"\
 	 PYTHONDONTWRITEBYTECODE=1\
 		python -m unittest --verbose --buffer deso.git.hook.mux.test.allTests
+
+
+.PHONY: %
+%:
+	@echo "Running deso.git.hook.mux.test.$@ ..."
+	@PYTHONPATH="$(PYTHONPATH)"\
+	 PYTHONDONTWRITEBYTECODE=1\
+		python -m unittest --verbose --buffer deso.git.hook.mux.test.$@
